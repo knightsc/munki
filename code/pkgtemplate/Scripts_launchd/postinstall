@@ -5,7 +5,8 @@ Postinstall script to load munki's launchdaemons.
 import subprocess
 import sys
 import os
-
+from Foundation import (CFPreferencesSetValue, kCFPreferencesAnyUser,
+                        kCFPreferencesCurrentHost)
 
 def getconsoleuser():
     '''Uses Apple's SystemConfiguration framework to get the current
@@ -14,6 +15,20 @@ def getconsoleuser():
     cfuser = SCDynamicStoreCopyConsoleUser(None, None, None)
     return cfuser[0]
 
+def munkirun(id):
+    cmd = ['/usr/local/munki/managedsoftwareupdate', '--id', id,
+           '--munkipkgsonly']
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    output, err = proc.communicate()
+    return output
+
+def munkiinstall():
+    cmd = ['/usr/local/munki/managedsoftwareupdate', '--installonly']
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    output, err = proc.communicate()
+    return output
 
 def launchctld(identifier):
     launchd = identifier + '.plist'
@@ -29,8 +44,17 @@ def launchctld(identifier):
         except KeyError:
             pass
 
-
 def main():
+    munkirun('dep_bootstrap')
+    munkiinstall()
+
+    # Revert the LastCheckDate so that if the user opens the Managed Software
+    # Center it will check for latest regular manifest software
+    CFPreferencesSetValue(
+        'LastCheckDate', '',
+        '/Library/Preferences/ManagedInstalls',
+        kCFPreferencesAnyUser, kCFPreferencesCurrentHost)
+
     # Only load the launch daemons if there isn't a console user or at the
     # loginwindow. launchctl.py will take care of the restart via the pkg
     # distribution.xml
